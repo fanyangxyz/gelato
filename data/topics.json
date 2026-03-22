@@ -1,0 +1,60 @@
+{
+  "topics": [
+    {
+      "id": 1,
+      "name": "Cell Biology",
+      "subtopics": ["Cell structure", "Organelles", "Membrane transport", "Cell division"],
+      "description": "The study of cell structure and function, including organelles, membranes, and cellular processes.",
+      "difficulty": 1
+    },
+    {
+      "id": 2,
+      "name": "Genetics",
+      "subtopics": ["DNA structure", "RNA and transcription", "Inheritance patterns", "Mutations"],
+      "description": "The study of genes, heredity, and genetic variation in living organisms.",
+      "difficulty": 2
+    },
+    {
+      "id": 3,
+      "name": "Evolution",
+      "subtopics": ["Natural selection", "Speciation", "Phylogenetics", "Evidence for evolution"],
+      "description": "The study of how species change over time through natural selection and genetic drift.",
+      "difficulty": 2
+    },
+    {
+      "id": 4,
+      "name": "Ecology",
+      "subtopics": ["Ecosystems", "Food webs", "Biomes", "Population dynamics"],
+      "description": "The study of interactions between organisms and their environment.",
+      "difficulty": 1
+    },
+    {
+      "id": 5,
+      "name": "Human Anatomy",
+      "subtopics": ["Skeletal system", "Muscular system", "Nervous system", "Circulatory system"],
+      "description": "The study of the structure of the human body and its organ systems.",
+      "difficulty": 2
+    },
+    {
+      "id": 6,
+      "name": "Biochemistry",
+      "subtopics": ["Proteins and enzymes", "Carbohydrates", "Lipids", "Metabolism"],
+      "description": "The study of chemical processes within and relating to living organisms.",
+      "difficulty": 3
+    },
+    {
+      "id": 7,
+      "name": "Microbiology",
+      "subtopics": ["Bacteria", "Viruses", "Immune system", "Antibiotics"],
+      "description": "The study of microscopic organisms including bacteria, viruses, and fungi.",
+      "difficulty": 2
+    },
+    {
+      "id": 8,
+      "name": "Plant Biology",
+      "subtopics": ["Photosynthesis", "Plant anatomy", "Plant reproduction", "Plant hormones"],
+      "description": "The study of plant structure, growth, reproduction, and metabolism.",
+      "difficulty": 1
+    }
+  ]
+}
