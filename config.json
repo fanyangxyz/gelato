@@ -1,0 +1,20 @@
+{
+  "models": {
+    "reading": "claude-sonnet-4-20250514",
+    "test": "claude-sonnet-4-20250514",
+    "flashcards": "claude-sonnet-4-20250514",
+    "summary": "claude-sonnet-4-20250514",
+    "recommendations": "claude-sonnet-4-20250514"
+  },
+  "defaults": {
+    "test_questions": 5,
+    "flashcard_count": 8,
+    "max_tokens": {
+      "reading": 1024,
+      "test": 2048,
+      "flashcards": 1024,
+      "summary": 512,
+      "recommendations": 512
+    }
+  }
+}

@@ -7,6 +7,28 @@ from anthropic import Anthropic
 # Load .env file for local development
 load_dotenv(Path(__file__).parent / ".env")
 
+# Load config
+CONFIG_PATH = Path(__file__).parent / "config.json"
+
+def load_config():
+    with open(CONFIG_PATH) as f:
+        return json.load(f)
+
+def get_model(task: str) -> str:
+    """Get the model for a specific task."""
+    config = load_config()
+    return config.get("models", {}).get(task, "claude-sonnet-4-20250514")
+
+def get_max_tokens(task: str) -> int:
+    """Get max tokens for a specific task."""
+    config = load_config()
+    return config.get("defaults", {}).get("max_tokens", {}).get(task, 1024)
+
+def get_default(key: str, fallback=None):
+    """Get a default config value."""
+    config = load_config()
+    return config.get("defaults", {}).get(key, fallback)
+
 client = None
 
 
@@ -60,16 +82,19 @@ Requirements:
 Do not include any quiz questions - just the educational content."""
 
     response = get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
+        model=get_model("reading"),
+        max_tokens=get_max_tokens("reading"),
         messages=[{"role": "user", "content": prompt}]
     )
 
     return response.content[0].text
 
 
-def generate_test(topic: str, subtopic: str, num_questions: int = 5, difficulty: int = 1) -> list:
+def generate_test(topic: str, subtopic: str, num_questions: int = None, difficulty: int = 1) -> list:
     """Generate multiple choice test questions."""
+    if num_questions is None:
+        num_questions = get_default("test_questions", 5)
+
     difficulty_desc = {1: "beginner", 2: "intermediate", 3: "advanced"}
     level = difficulty_desc.get(difficulty, "intermediate")
 
@@ -95,8 +120,8 @@ The "correct" field should be the index (0-3) of the correct option.
 Make questions progressively harder. Include a mix of recall and application questions."""
 
     response = get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2048,
+        model=get_model("test"),
+        max_tokens=get_max_tokens("test"),
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -116,8 +141,11 @@ Make questions progressively harder. Include a mix of recall and application que
         return []
 
 
-def generate_flashcards(topic: str, subtopic: str, num_cards: int = 8, difficulty: int = 1) -> list:
+def generate_flashcards(topic: str, subtopic: str, num_cards: int = None, difficulty: int = 1) -> list:
     """Generate flashcard pairs (term/definition)."""
+    if num_cards is None:
+        num_cards = get_default("flashcard_count", 8)
+
     difficulty_desc = {1: "beginner", 2: "intermediate", 3: "advanced"}
     level = difficulty_desc.get(difficulty, "intermediate")
 
@@ -144,8 +172,8 @@ Include a mix of:
 - Notable examples"""
 
     response = get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
+        model=get_model("flashcards"),
+        max_tokens=get_max_tokens("flashcards"),
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -194,8 +222,8 @@ Generate a brief, encouraging summary that:
 Keep it concise (150-250 words). Use markdown formatting."""
 
     response = get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=512,
+        model=get_model("summary"),
+        max_tokens=get_max_tokens("summary"),
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -248,8 +276,8 @@ Guidelines:
 - Keep total time within available minutes"""
 
     response = get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=512,
+        model=get_model("recommendations"),
+        max_tokens=get_max_tokens("recommendations"),
         messages=[{"role": "user", "content": prompt}]
     )
 
