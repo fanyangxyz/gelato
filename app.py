@@ -14,6 +14,8 @@ st.set_page_config(
 )
 
 # Initialize session state
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
 if "current_page" not in st.session_state:
     st.session_state.current_page = "home"
 if "selected_topic" not in st.session_state:
@@ -32,6 +34,68 @@ if "current_card" not in st.session_state:
     st.session_state.current_card = 0
 if "show_back" not in st.session_state:
     st.session_state.show_back = False
+if "is_guest" not in st.session_state:
+    st.session_state.is_guest = False
+
+
+# =============================================================================
+# Login Screen
+# =============================================================================
+
+def render_login():
+    """Render the login/user selection screen."""
+    st.title("Biology Learning App")
+    st.write("Select your profile or create a new one to track your progress.")
+
+    # Guest option
+    st.subheader("Quick Start")
+    if st.button("Continue as Guest", use_container_width=True):
+        st.session_state.current_user = "_guest_"
+        st.session_state.is_guest = True
+        db.set_current_user("_guest_")
+        st.rerun()
+    st.caption("Guest progress is not saved between sessions.")
+
+    st.divider()
+
+    existing_users = db.get_users()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Existing Users")
+        if existing_users:
+            selected_user = st.selectbox("Select your name", options=existing_users)
+            if st.button("Continue", key="login_existing"):
+                st.session_state.current_user = selected_user
+                st.session_state.is_guest = False
+                db.set_current_user(selected_user)
+                st.rerun()
+        else:
+            st.write("No users yet. Create one!")
+
+    with col2:
+        st.subheader("New User")
+        new_username = st.text_input("Enter your name")
+        if st.button("Create & Continue", key="login_new"):
+            if new_username.strip():
+                username = new_username.strip()
+                db.add_user(username)
+                st.session_state.current_user = username
+                st.session_state.is_guest = False
+                db.set_current_user(username)
+                st.rerun()
+            else:
+                st.error("Please enter a name")
+
+
+# Check if user is logged in
+if st.session_state.current_user is None:
+    render_login()
+    st.stop()
+
+# Set the current user in the database module
+db.set_current_user(st.session_state.current_user)
 
 
 def navigate_to(page: str, topic_id: int = None, subtopic: str = None):
@@ -52,6 +116,19 @@ def navigate_to(page: str, topic_id: int = None, subtopic: str = None):
 # Sidebar
 with st.sidebar:
     st.title("Biology Learning")
+
+    # User info
+    if st.session_state.is_guest:
+        st.caption("Browsing as: **Guest**")
+        st.caption("Progress not saved.")
+    else:
+        st.caption(f"Logged in as: **{st.session_state.current_user}**")
+    if st.button("Switch User", use_container_width=True):
+        st.session_state.current_user = None
+        st.session_state.is_guest = False
+        st.rerun()
+
+    st.divider()
 
     st.subheader("Available Time")
     st.session_state.available_time = st.slider(

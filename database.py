@@ -40,7 +40,7 @@ class GitHubStorage:
             self._sha = contents.sha
             self._cache = json.loads(contents.decoded_content.decode())
         except Exception:
-            self._cache = {"progress": [], "sessions": []}
+            self._cache = {"progress": [], "users": []}
             self._sha = None
 
         return self._cache
@@ -64,8 +64,11 @@ class GitHubStorage:
             print(f"Error saving to GitHub: {e}")
             raise
 
-    def get_progress(self):
-        return self._load().get("progress", [])
+    def get_progress(self, user_id: str = None):
+        progress = self._load().get("progress", [])
+        if user_id:
+            progress = [p for p in progress if p.get("user_id") == user_id]
+        return progress
 
     def add_progress(self, entry):
         data = self._load()
@@ -73,6 +76,17 @@ class GitHubStorage:
         entry["completed_at"] = datetime.now().isoformat()
         data["progress"].append(entry)
         self._save(data)
+
+    def get_users(self):
+        return self._load().get("users", [])
+
+    def add_user(self, username: str):
+        data = self._load()
+        if "users" not in data:
+            data["users"] = []
+        if username not in data["users"]:
+            data["users"].append(username)
+            self._save(data)
 
     def clear_cache(self):
         """Force reload from GitHub on next access."""
@@ -101,9 +115,19 @@ class LocalStorage:
         conn = self._get_conn()
         cursor = conn.cursor()
 
+        # Create users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL
+            )
+        """)
+
+        # Create progress table with user_id
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS progress (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
                 topic_id INTEGER NOT NULL,
                 subtopic TEXT,
                 activity_type TEXT NOT NULL,
@@ -116,10 +140,13 @@ class LocalStorage:
         conn.commit()
         conn.close()
 
-    def get_progress(self):
+    def get_progress(self, user_id: str = None):
         conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM progress ORDER BY completed_at DESC")
+        if user_id:
+            cursor.execute("SELECT * FROM progress WHERE user_id = ? ORDER BY completed_at DESC", (user_id,))
+        else:
+            cursor.execute("SELECT * FROM progress ORDER BY completed_at DESC")
         rows = cursor.fetchall()
         conn.close()
         return [dict(row) for row in rows]
@@ -128,12 +155,30 @@ class LocalStorage:
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute(
-            """INSERT INTO progress (topic_id, subtopic, activity_type, score, time_spent_minutes)
-               VALUES (?, ?, ?, ?, ?)""",
-            (entry.get("topic_id"), entry.get("subtopic"), entry.get("activity_type"),
-             entry.get("score"), entry.get("time_spent_minutes"))
+            """INSERT INTO progress (user_id, topic_id, subtopic, activity_type, score, time_spent_minutes)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (entry.get("user_id"), entry.get("topic_id"), entry.get("subtopic"),
+             entry.get("activity_type"), entry.get("score"), entry.get("time_spent_minutes"))
         )
         conn.commit()
+        conn.close()
+
+    def get_users(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username FROM users ORDER BY username")
+        rows = cursor.fetchall()
+        conn.close()
+        return [row["username"] for row in rows]
+
+    def add_user(self, username: str):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO users (username) VALUES (?)", (username,))
+            conn.commit()
+        except Exception:
+            pass  # User already exists
         conn.close()
 
     def clear_cache(self):
@@ -179,8 +224,36 @@ def get_topic_by_id(topic_id: int):
 
 
 # =============================================================================
+# User operations
+# =============================================================================
+
+def get_users():
+    """Get all registered usernames."""
+    return get_storage().get_users()
+
+
+def add_user(username: str):
+    """Add a new user."""
+    get_storage().add_user(username)
+
+
+# =============================================================================
 # Database operations (compatible interface)
 # =============================================================================
+
+# Current user context (set by the app)
+_current_user = None
+
+def set_current_user(username: str):
+    """Set the current user context."""
+    global _current_user
+    _current_user = username
+
+
+def get_current_user():
+    """Get the current user context."""
+    return _current_user
+
 
 def init_db():
     """Initialize the database."""
@@ -189,8 +262,16 @@ def init_db():
 
 def record_progress(topic_id: int, subtopic: str, activity_type: str,
                     score: int = None, time_spent_minutes: int = None):
-    """Record a completed activity."""
+    """Record a completed activity for the current user."""
+    if not _current_user:
+        raise ValueError("No user set. Call set_current_user first.")
+
+    # Skip saving for guests
+    if _current_user == "_guest_":
+        return
+
     get_storage().add_progress({
+        "user_id": _current_user,
         "topic_id": topic_id,
         "subtopic": subtopic,
         "activity_type": activity_type,
@@ -200,9 +281,9 @@ def record_progress(topic_id: int, subtopic: str, activity_type: str,
 
 
 def get_progress_summary():
-    """Get a summary of progress by topic."""
+    """Get a summary of progress by topic for the current user."""
     topics = get_all_topics()
-    progress = get_storage().get_progress()
+    progress = get_storage().get_progress(_current_user)
 
     summary = []
     for topic in topics:
@@ -235,8 +316,8 @@ def get_progress_summary():
 
 
 def get_topic_progress(topic_id: int):
-    """Get detailed progress for a specific topic."""
-    progress = get_storage().get_progress()
+    """Get detailed progress for a specific topic for the current user."""
+    progress = get_storage().get_progress(_current_user)
     return [p for p in progress if p.get("topic_id") == topic_id][:20]
 
 
@@ -248,8 +329,8 @@ def get_least_studied_topics(limit: int = 3):
 
 
 def get_recent_activity(limit: int = 5):
-    """Get recent learning activity."""
-    progress = get_storage().get_progress()
+    """Get recent learning activity for the current user."""
+    progress = get_storage().get_progress(_current_user)
     topics = {t["id"]: t["name"] for t in get_all_topics()}
 
     recent = []
