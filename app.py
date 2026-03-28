@@ -16,6 +16,10 @@ st.set_page_config(
 # Initialize session state
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
+if "api_key_source" not in st.session_state:
+    st.session_state.api_key_source = None  # "own", "passphrase", or None
+if "user_api_key" not in st.session_state:
+    st.session_state.user_api_key = None
 if "current_page" not in st.session_state:
     st.session_state.current_page = "home"
 if "selected_topic" not in st.session_state:
@@ -38,6 +42,71 @@ if "is_guest" not in st.session_state:
     st.session_state.is_guest = False
 if "language" not in st.session_state:
     st.session_state.language = "en"
+
+
+# =============================================================================
+# API Key Setup Screen
+# =============================================================================
+
+def get_owner_passphrase():
+    """Get the owner's passphrase from secrets or environment."""
+    try:
+        import streamlit as st
+        if "ACCESS_PASSPHRASE" in st.secrets:
+            return st.secrets["ACCESS_PASSPHRASE"]
+    except Exception:
+        pass
+    import os
+    return os.environ.get("ACCESS_PASSPHRASE", "")
+
+
+def render_api_setup():
+    """Render the API key setup screen."""
+    st.title("Biology Learning App")
+    st.write("To use this app, please provide API access.")
+
+    tab1, tab2 = st.tabs(["Use Your Own API Key", "Enter Access Code"])
+
+    with tab1:
+        st.subheader("Your Anthropic API Key")
+        user_key = st.text_input(
+            "Enter your Anthropic API key",
+            type="password",
+            placeholder="sk-ant-..."
+        )
+        st.caption("Your key is not stored permanently. Get one at [console.anthropic.com](https://console.anthropic.com)")
+
+        if st.button("Use My Key", key="use_own_key"):
+            if user_key and user_key.startswith("sk-ant-"):
+                st.session_state.api_key_source = "own"
+                st.session_state.user_api_key = user_key
+                st.rerun()
+            else:
+                st.error("Please enter a valid Anthropic API key (starts with sk-ant-)")
+
+    with tab2:
+        st.subheader("Access Code")
+        passphrase = st.text_input(
+            "Enter access code",
+            type="password",
+            placeholder="Enter code..."
+        )
+        st.caption("If you have an access code, enter it here to use the app.")
+
+        if st.button("Submit Code", key="use_passphrase"):
+            owner_passphrase = get_owner_passphrase()
+            if owner_passphrase and passphrase == owner_passphrase:
+                st.session_state.api_key_source = "passphrase"
+                st.session_state.user_api_key = None
+                st.rerun()
+            else:
+                st.error("Invalid access code")
+
+
+# Check if API access is set up
+if st.session_state.api_key_source is None:
+    render_api_setup()
+    st.stop()
 
 
 # =============================================================================
@@ -130,6 +199,18 @@ with st.sidebar:
     if st.button("Switch User", use_container_width=True):
         st.session_state.current_user = None
         st.session_state.is_guest = False
+        st.rerun()
+
+    # API key info
+    if st.session_state.api_key_source == "own":
+        st.caption("Using: Your API key")
+    else:
+        st.caption("Using: Access code")
+
+    if st.button("Change API Access", use_container_width=True):
+        st.session_state.api_key_source = None
+        st.session_state.user_api_key = None
+        claude_api.reset_client()
         st.rerun()
 
     st.divider()

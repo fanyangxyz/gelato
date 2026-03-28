@@ -40,8 +40,18 @@ client = None
 
 
 def get_api_key():
-    """Get API key from Streamlit secrets (cloud) or environment (local)."""
-    # Try Streamlit secrets first (for Streamlit Cloud deployment)
+    """Get API key from user session, Streamlit secrets, or environment."""
+    # First check if user provided their own key
+    try:
+        import streamlit as st
+        if st.session_state.get("api_key_source") == "own":
+            user_key = st.session_state.get("user_api_key")
+            if user_key:
+                return user_key
+    except Exception:
+        pass
+
+    # Try Streamlit secrets (for Streamlit Cloud deployment)
     try:
         import streamlit as st
         if "ANTHROPIC_API_KEY" in st.secrets:
@@ -57,6 +67,12 @@ def get_api_key():
             "Set it in .env (local) or Streamlit secrets (cloud)."
         )
     return api_key
+
+
+def reset_client():
+    """Reset the client when API key changes."""
+    global client
+    client = None
 
 
 def get_client():
