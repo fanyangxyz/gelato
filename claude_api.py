@@ -122,7 +122,27 @@ Do not include any quiz questions - just the educational content."""
     return response.content[0].text
 
 
-def generate_test(topic: str, subtopic: str, num_questions: int = None, difficulty: int = 1) -> list:
+def format_test_history(test_history: list, missed_questions: list) -> str:
+    """Format test history and missed questions for context."""
+    lines = []
+
+    if test_history:
+        lines.append("Previous test performance on this topic:")
+        for item in test_history[:5]:
+            score = item.get("score", "N/A")
+            date = item.get("completed_at", "")[:10] if item.get("completed_at") else ""
+            lines.append(f"- Score: {score}% on {date}")
+
+    if missed_questions:
+        lines.append("\nQuestions the student previously got wrong (for spaced repetition):")
+        for q in missed_questions[:5]:
+            lines.append(f"- {q}")
+
+    return "\n".join(lines) if lines else ""
+
+
+def generate_test(topic: str, subtopic: str, num_questions: int = None, difficulty: int = 1,
+                  test_history: list = None, missed_questions: list = None) -> list:
     """Generate multiple choice test questions."""
     if num_questions is None:
         num_questions = get_default("test_questions", 5)
@@ -130,12 +150,26 @@ def generate_test(topic: str, subtopic: str, num_questions: int = None, difficul
     difficulty_desc = {1: "beginner", 2: "intermediate", 3: "advanced"}
     level = difficulty_desc.get(difficulty, "intermediate")
 
+    # Build history context
+    history_context = ""
+    if test_history or missed_questions:
+        history_text = format_test_history(test_history or [], missed_questions or [])
+        if history_text:
+            history_context = f"""
+{history_text}
+
+Use this context for spaced repetition:
+- Include 1-2 questions testing concepts they previously got wrong
+- Vary the question format from before to test true understanding
+- Adjust difficulty based on their performance history
+"""
+
     prompt = f"""You are a biology teacher creating a quiz.
 
 Generate {num_questions} multiple choice questions about {subtopic} within {topic}.
 
 Target level: {level}
-
+{history_context}
 Return ONLY valid JSON in this exact format:
 {{
   "questions": [
@@ -173,7 +207,25 @@ Make questions progressively harder. Include a mix of recall and application que
         return []
 
 
-def generate_flashcards(topic: str, subtopic: str, num_cards: int = None, difficulty: int = 1) -> list:
+def format_flashcard_context(missed_questions: list, review_items: list) -> str:
+    """Format context for flashcard generation with spaced repetition."""
+    lines = []
+
+    if missed_questions:
+        lines.append("Concepts the student struggled with (prioritize these):")
+        for q in missed_questions[:5]:
+            lines.append(f"- {q}")
+
+    if review_items:
+        lines.append("\nTopics due for review (spaced repetition):")
+        for item in review_items[:3]:
+            lines.append(f"- {item.get('subtopic')} (priority: {item.get('priority', 0):.1f})")
+
+    return "\n".join(lines) if lines else ""
+
+
+def generate_flashcards(topic: str, subtopic: str, num_cards: int = None, difficulty: int = 1,
+                        missed_questions: list = None, review_items: list = None) -> list:
     """Generate flashcard pairs (term/definition)."""
     if num_cards is None:
         num_cards = get_default("flashcard_count", 8)
@@ -181,12 +233,25 @@ def generate_flashcards(topic: str, subtopic: str, num_cards: int = None, diffic
     difficulty_desc = {1: "beginner", 2: "intermediate", 3: "advanced"}
     level = difficulty_desc.get(difficulty, "intermediate")
 
+    # Build spaced repetition context
+    sr_context = ""
+    context_text = format_flashcard_context(missed_questions or [], review_items or [])
+    if context_text:
+        sr_context = f"""
+{context_text}
+
+For spaced repetition:
+- Create cards that reinforce concepts they got wrong
+- Include variations of difficult concepts
+- Mix new material with review material
+"""
+
     prompt = f"""You are a biology teacher creating flashcards for studying.
 
 Generate {num_cards} flashcards about {subtopic} within {topic}.
 
 Target level: {level}
-
+{sr_context}
 Return ONLY valid JSON in this exact format:
 {{
   "flashcards": [
@@ -222,7 +287,8 @@ Include a mix of:
         return []
 
 
-def generate_summary(topic: str, subtopics_studied: list, progress_data: list) -> str:
+def generate_summary(topic: str, subtopics_studied: list, progress_data: list,
+                     review_items: list = None, missed_questions: list = None) -> str:
     """Generate a personalized summary based on what the user has studied."""
 
     activities_desc = []
@@ -238,17 +304,36 @@ def generate_summary(topic: str, subtopics_studied: list, progress_data: list) -
     activities_str = "\n".join(activities_desc) if activities_desc else "No prior activities recorded"
     subtopics_str = ", ".join(subtopics_studied) if subtopics_studied else "various subtopics"
 
+    # Build spaced repetition context
+    sr_context = ""
+    if review_items or missed_questions:
+        sr_lines = []
+        if review_items:
+            sr_lines.append("Topics due for review:")
+            for item in review_items[:3]:
+                avg_score = sum(item.get("test_scores", [])) / len(item.get("test_scores", [1])) if item.get("test_scores") else None
+                score_str = f" (avg score: {avg_score:.0f}%)" if avg_score else ""
+                sr_lines.append(f"- {item.get('subtopic')}{score_str}")
+
+        if missed_questions:
+            sr_lines.append("\nConcepts to reinforce:")
+            for q in missed_questions[:3]:
+                sr_lines.append(f"- {q}")
+
+        sr_context = "\n" + "\n".join(sr_lines)
+
     prompt = f"""You are a biology tutor providing a personalized study summary.
 
 The student has been studying {topic}, focusing on: {subtopics_str}
 
 Their recent activity:
 {activities_str}
+{sr_context}
 
 Generate a brief, encouraging summary that:
 1. Acknowledges what they've learned
 2. Highlights 3-4 key concepts they should remember
-3. Suggests what to focus on next
+3. **Based on spaced repetition data, suggest specific topics to review**
 4. Keeps a supportive, motivating tone
 
 Keep it concise (150-250 words). Use markdown formatting."""
@@ -262,7 +347,8 @@ Keep it concise (150-250 words). Use markdown formatting."""
     return response.content[0].text
 
 
-def get_recommendations(available_minutes: int, progress_summary: list, least_studied: list) -> dict:
+def get_recommendations(available_minutes: int, progress_summary: list, least_studied: list,
+                        review_items: list = None) -> dict:
     """Get AI-powered recommendations based on time and progress."""
 
     # Format progress for the prompt
@@ -277,6 +363,16 @@ def get_recommendations(available_minutes: int, progress_summary: list, least_st
 
     least_studied_names = [t["name"] for t in least_studied]
 
+    # Build spaced repetition context
+    sr_context = ""
+    if review_items:
+        sr_lines = ["Topics due for spaced repetition review (prioritize these):"]
+        for item in review_items[:5]:
+            priority = item.get("priority", 0)
+            missed_count = len(item.get("missed_questions", []))
+            sr_lines.append(f"- {item.get('subtopic')} in {item.get('topic_name')} (priority: {priority:.1f}, missed questions: {missed_count})")
+        sr_context = "\n" + "\n".join(sr_lines)
+
     prompt = f"""You are a biology study advisor helping a student plan their study session.
 
 Available time: {available_minutes} minutes
@@ -285,6 +381,7 @@ Current progress by topic:
 {progress_str}
 
 Topics needing more attention: {', '.join(least_studied_names)}
+{sr_context}
 
 Based on the available time, recommend a study plan. Return ONLY valid JSON:
 {{
@@ -304,7 +401,8 @@ Guidelines:
 - 5-10 min: Quick flashcards or summary
 - 15-30 min: One focused read or test session
 - 30-60 min: Combination of read + test or multiple topics
-- Prioritize less-studied topics
+- **Prioritize spaced repetition items that are due for review**
+- Include a mix of new material and review
 - Keep total time within available minutes"""
 
     response = get_client().messages.create(

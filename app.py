@@ -196,10 +196,13 @@ def render_home():
         try:
             progress_summary = db.get_progress_summary()
             least_studied = db.get_least_studied_topics(3)
+            review_items = db.get_spaced_repetition_data(limit=5)
+
             recommendations = claude_api.get_recommendations(
                 st.session_state.available_time,
                 progress_summary,
-                least_studied
+                least_studied,
+                review_items=review_items
             )
 
             st.info(recommendations.get("recommendation", "Start exploring biology!"))
@@ -386,11 +389,22 @@ def render_test():
     if st.session_state.quiz_questions is None:
         with st.spinner("Generating quiz questions..."):
             try:
+                # Get test history and missed questions for spaced repetition
+                test_history = db.get_activity_history(
+                    activity_type="test",
+                    topic_id=topic["id"],
+                    limit=5
+                )
+                missed_questions = db.get_missed_questions(topic_id=topic["id"], limit=5)
+                missed_q_texts = [q.get("question", "") for q in missed_questions]
+
                 st.session_state.quiz_questions = claude_api.generate_test(
                     topic["name"],
                     subtopic,
                     num_questions=5,
-                    difficulty=topic["difficulty"]
+                    difficulty=topic["difficulty"],
+                    test_history=test_history,
+                    missed_questions=missed_q_texts
                 )
             except Exception as e:
                 st.error(f"Error generating quiz: {e}")
@@ -469,11 +483,18 @@ def render_flashcards():
     if st.session_state.flashcards is None:
         with st.spinner("Generating flashcards..."):
             try:
+                # Get missed questions and review items for spaced repetition
+                missed_questions = db.get_missed_questions(topic_id=topic["id"], limit=5)
+                missed_q_texts = [q.get("question", "") for q in missed_questions]
+                review_items = db.get_spaced_repetition_data(limit=3)
+
                 st.session_state.flashcards = claude_api.generate_flashcards(
                     topic["name"],
                     subtopic,
                     num_cards=8,
-                    difficulty=topic["difficulty"]
+                    difficulty=topic["difficulty"],
+                    missed_questions=missed_q_texts,
+                    review_items=review_items
                 )
             except Exception as e:
                 st.error(f"Error generating flashcards: {e}")
@@ -558,10 +579,17 @@ def render_summarize():
             # Get progress for this topic
             topic_progress = db.get_topic_progress(topic["id"])
 
+            # Get spaced repetition data
+            review_items = db.get_spaced_repetition_data(limit=3)
+            missed_questions = db.get_missed_questions(topic_id=topic["id"], limit=5)
+            missed_q_texts = [q.get("question", "") for q in missed_questions]
+
             summary = claude_api.generate_summary(
                 topic["name"],
                 topic["subtopics"],
-                topic_progress
+                topic_progress,
+                review_items=review_items,
+                missed_questions=missed_q_texts
             )
 
             st.markdown(summary)

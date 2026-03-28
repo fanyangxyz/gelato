@@ -352,6 +352,110 @@ def record_summary(topic_id: int, subtopic: str, time_spent_minutes: int = 5):
     )
 
 
+def get_activity_history(activity_type: str = None, topic_id: int = None, limit: int = 10):
+    """Get the user's activity history, optionally filtered by type and topic."""
+    progress = get_storage().get_progress(_current_user)
+    topics = {t["id"]: t["name"] for t in get_all_topics()}
+
+    activities = []
+    for p in progress:
+        if activity_type and p.get("activity_type") != activity_type:
+            continue
+        if topic_id and p.get("topic_id") != topic_id:
+            continue
+
+        p["topic_name"] = topics.get(p.get("topic_id"), "Unknown")
+        activities.append(p)
+
+    return activities[:limit]
+
+
+def get_spaced_repetition_data(limit: int = 5):
+    """
+    Get topics/subtopics that need review based on spaced repetition principles:
+    - Topics with low test scores
+    - Topics not studied recently
+    - Questions that were answered incorrectly
+    """
+    from datetime import datetime, timedelta
+
+    progress = get_storage().get_progress(_current_user)
+    topics = {t["id"]: t["name"] for t in get_all_topics()}
+
+    # Track subtopic performance
+    subtopic_data = {}
+
+    for p in progress:
+        topic_id = p.get("topic_id")
+        subtopic = p.get("subtopic")
+        key = f"{topic_id}:{subtopic}"
+
+        if key not in subtopic_data:
+            subtopic_data[key] = {
+                "topic_id": topic_id,
+                "topic_name": topics.get(topic_id, "Unknown"),
+                "subtopic": subtopic,
+                "last_studied": None,
+                "study_count": 0,
+                "test_scores": [],
+                "missed_questions": []
+            }
+
+        data = subtopic_data[key]
+        data["study_count"] += 1
+
+        # Track most recent study date
+        completed_at = p.get("completed_at", "")
+        if completed_at and (not data["last_studied"] or completed_at > data["last_studied"]):
+            data["last_studied"] = completed_at
+
+        # Track test scores
+        if p.get("activity_type") == "test" and p.get("score") is not None:
+            data["test_scores"].append(p.get("score"))
+
+        # Track missed questions
+        if p.get("activity_type") == "test":
+            details = p.get("details", {})
+            for q in details.get("questions", []):
+                if not q.get("is_correct"):
+                    data["missed_questions"].append(q.get("question"))
+
+    # Calculate review priority
+    now = datetime.now()
+    review_items = []
+
+    for key, data in subtopic_data.items():
+        priority = 0
+
+        # Lower average score = higher priority
+        if data["test_scores"]:
+            avg_score = sum(data["test_scores"]) / len(data["test_scores"])
+            if avg_score < 70:
+                priority += (70 - avg_score) / 10  # Up to 7 points
+
+        # More missed questions = higher priority
+        priority += min(len(data["missed_questions"]), 5)  # Up to 5 points
+
+        # Longer since last study = higher priority
+        if data["last_studied"]:
+            try:
+                last_date = datetime.fromisoformat(data["last_studied"].replace("Z", ""))
+                days_ago = (now - last_date).days
+                if days_ago > 7:
+                    priority += min(days_ago / 7, 5)  # Up to 5 points for 35+ days
+            except Exception:
+                pass
+
+        data["priority"] = priority
+        if priority > 0:
+            review_items.append(data)
+
+    # Sort by priority (highest first)
+    review_items.sort(key=lambda x: x["priority"], reverse=True)
+
+    return review_items[:limit]
+
+
 def get_reading_history(topic_id: int = None, limit: int = 10):
     """Get the user's reading history."""
     progress = get_storage().get_progress(_current_user)
