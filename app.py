@@ -359,12 +359,7 @@ def render_read():
             st.markdown(content)
 
             # Record progress
-            db.record_progress(
-                topic["id"],
-                subtopic,
-                "read",
-                time_spent_minutes=10
-            )
+            db.record_read(topic["id"], subtopic, time_spent_minutes=10)
 
             st.success("Reading completed! Progress saved.")
 
@@ -439,12 +434,13 @@ def render_test():
             st.divider()
             st.metric("Your Score", f"{score}%", f"{correct}/{len(questions)} correct")
 
-            # Record progress
-            db.record_progress(
-                topic["id"],
-                subtopic,
-                "test",
+            # Record progress with detailed question results
+            db.record_test(
+                topic_id=topic["id"],
+                subtopic=subtopic,
                 score=score,
+                questions=questions,
+                user_answers=st.session_state.quiz_answers,
                 time_spent_minutes=15
             )
 
@@ -531,10 +527,10 @@ def render_flashcards():
         else:
             if st.button("Finish"):
                 # Record progress
-                db.record_progress(
-                    topic["id"],
-                    subtopic,
-                    "flashcard",
+                db.record_flashcards(
+                    topic_id=topic["id"],
+                    subtopic=subtopic,
+                    card_count=len(cards),
                     time_spent_minutes=10
                 )
                 st.success("Flashcards completed! Progress saved.")
@@ -567,12 +563,7 @@ def render_summarize():
             st.markdown(summary)
 
             # Record progress
-            db.record_progress(
-                topic["id"],
-                subtopic,
-                "summarize",
-                time_spent_minutes=5
-            )
+            db.record_summary(topic["id"], subtopic, time_spent_minutes=5)
 
             st.success("Summary reviewed! Progress saved.")
 

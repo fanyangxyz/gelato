@@ -261,7 +261,8 @@ def init_db():
 
 
 def record_progress(topic_id: int, subtopic: str, activity_type: str,
-                    score: int = None, time_spent_minutes: int = None):
+                    score: int = None, time_spent_minutes: int = None,
+                    details: dict = None):
     """Record a completed activity for the current user."""
     if not _current_user:
         raise ValueError("No user set. Call set_current_user first.")
@@ -270,14 +271,111 @@ def record_progress(topic_id: int, subtopic: str, activity_type: str,
     if _current_user == "_guest_":
         return
 
-    get_storage().add_progress({
+    entry = {
         "user_id": _current_user,
         "topic_id": topic_id,
         "subtopic": subtopic,
         "activity_type": activity_type,
         "score": score,
         "time_spent_minutes": time_spent_minutes
-    })
+    }
+
+    # Add activity-specific details
+    if details:
+        entry["details"] = details
+
+    get_storage().add_progress(entry)
+
+
+def record_read(topic_id: int, subtopic: str, time_spent_minutes: int = 10):
+    """Record a reading activity."""
+    record_progress(
+        topic_id=topic_id,
+        subtopic=subtopic,
+        activity_type="read",
+        time_spent_minutes=time_spent_minutes
+    )
+
+
+def record_test(topic_id: int, subtopic: str, score: int, questions: list,
+                user_answers: dict, time_spent_minutes: int = 15):
+    """Record a test activity with detailed question results."""
+    # Build detailed results for each question
+    question_results = []
+    for i, q in enumerate(questions):
+        user_answer_idx = user_answers.get(i, -1)
+        correct_idx = q.get("correct", 0)
+        is_correct = user_answer_idx == correct_idx
+
+        question_results.append({
+            "question": q.get("question", ""),
+            "user_answer": q["options"][user_answer_idx] if 0 <= user_answer_idx < len(q["options"]) else None,
+            "correct_answer": q["options"][correct_idx] if 0 <= correct_idx < len(q["options"]) else None,
+            "is_correct": is_correct
+        })
+
+    record_progress(
+        topic_id=topic_id,
+        subtopic=subtopic,
+        activity_type="test",
+        score=score,
+        time_spent_minutes=time_spent_minutes,
+        details={
+            "question_count": len(questions),
+            "correct_count": sum(1 for r in question_results if r["is_correct"]),
+            "questions": question_results
+        }
+    )
+
+
+def record_flashcards(topic_id: int, subtopic: str, card_count: int,
+                      time_spent_minutes: int = 10):
+    """Record a flashcard activity."""
+    record_progress(
+        topic_id=topic_id,
+        subtopic=subtopic,
+        activity_type="flashcard",
+        time_spent_minutes=time_spent_minutes,
+        details={
+            "card_count": card_count
+        }
+    )
+
+
+def record_summary(topic_id: int, subtopic: str, time_spent_minutes: int = 5):
+    """Record a summary activity."""
+    record_progress(
+        topic_id=topic_id,
+        subtopic=subtopic,
+        activity_type="summarize",
+        time_spent_minutes=time_spent_minutes
+    )
+
+
+def get_missed_questions(topic_id: int = None, limit: int = 10):
+    """Get questions the user got wrong for review."""
+    progress = get_storage().get_progress(_current_user)
+
+    missed = []
+    for p in progress:
+        if p.get("activity_type") != "test":
+            continue
+        if topic_id and p.get("topic_id") != topic_id:
+            continue
+
+        details = p.get("details", {})
+        for q in details.get("questions", []):
+            if not q.get("is_correct"):
+                missed.append({
+                    "topic_id": p.get("topic_id"),
+                    "subtopic": p.get("subtopic"),
+                    "question": q.get("question"),
+                    "correct_answer": q.get("correct_answer"),
+                    "user_answer": q.get("user_answer"),
+                    "date": p.get("completed_at")
+                })
+
+    return missed[:limit]
 
 
 def get_progress_summary():
