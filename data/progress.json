@@ -1,5 +1,16 @@
 {
-  "progress": [],
+  "progress": [
+    {
+      "user_id": "fanyangxyz",
+      "topic_id": 1,
+      "subtopic": "Cell structure and organelles",
+      "activity_type": "read",
+      "score": null,
+      "time_spent_minutes": 10,
+      "id": 1,
+      "completed_at": "2026-03-28T04:01:46.125571"
+    }
+  ],
   "users": [
     "fanyangxyz"
   ]
