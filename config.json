@@ -16,5 +16,9 @@
       "summary": 512,
       "recommendations": 512
     }
+  },
+  "languages": {
+    "en": "English",
+    "zh": "中文"
   }
 }

@@ -29,6 +29,13 @@ def get_default(key: str, fallback=None):
     config = load_config()
     return config.get("defaults", {}).get(key, fallback)
 
+
+def get_language_instruction(lang: str) -> str:
+    """Get language instruction for prompts."""
+    if lang == "zh":
+        return "\n\nIMPORTANT: Generate all content in Chinese (简体中文). Use Chinese for all explanations, questions, and answers."
+    return ""  # Default to English, no extra instruction needed
+
 client = None
 
 
@@ -79,7 +86,7 @@ def format_reading_history(history: list) -> str:
 
 
 def generate_reading(topic: str, subtopic: str, difficulty: int = 1,
-                     reading_history: list = None) -> str:
+                     reading_history: list = None, language: str = "en") -> str:
     """Generate educational reading content on a biology topic."""
     difficulty_desc = {1: "beginner", 2: "intermediate", 3: "advanced"}
     level = difficulty_desc.get(difficulty, "intermediate")
@@ -96,6 +103,8 @@ Use this context to:
 - Reference previous topics when making connections
 """
 
+    lang_instruction = get_language_instruction(language)
+
     prompt = f"""You are a biology teacher creating educational content.
 
 Generate a clear, engaging explanation about {subtopic} within the broader topic of {topic}.
@@ -111,7 +120,7 @@ Requirements:
 - Use markdown formatting for headers and bullet points
 - If the student has prior knowledge, briefly connect new concepts to what they've learned
 
-Do not include any quiz questions - just the educational content."""
+Do not include any quiz questions - just the educational content.{lang_instruction}"""
 
     response = get_client().messages.create(
         model=get_model("reading"),
@@ -142,7 +151,7 @@ def format_test_history(test_history: list, missed_questions: list) -> str:
 
 
 def generate_test(topic: str, subtopic: str, num_questions: int = None, difficulty: int = 1,
-                  test_history: list = None, missed_questions: list = None) -> list:
+                  test_history: list = None, missed_questions: list = None, language: str = "en") -> list:
     """Generate multiple choice test questions."""
     if num_questions is None:
         num_questions = get_default("test_questions", 5)
@@ -183,7 +192,7 @@ Return ONLY valid JSON in this exact format:
 }}
 
 The "correct" field should be the index (0-3) of the correct option.
-Make questions progressively harder. Include a mix of recall and application questions."""
+Make questions progressively harder. Include a mix of recall and application questions.{get_language_instruction(language)}"""
 
     response = get_client().messages.create(
         model=get_model("test"),
@@ -225,7 +234,7 @@ def format_flashcard_context(missed_questions: list, review_items: list) -> str:
 
 
 def generate_flashcards(topic: str, subtopic: str, num_cards: int = None, difficulty: int = 1,
-                        missed_questions: list = None, review_items: list = None) -> list:
+                        missed_questions: list = None, review_items: list = None, language: str = "en") -> list:
     """Generate flashcard pairs (term/definition)."""
     if num_cards is None:
         num_cards = get_default("flashcard_count", 8)
@@ -266,7 +275,7 @@ Include a mix of:
 - Key vocabulary terms
 - Important concepts
 - Processes or mechanisms
-- Notable examples"""
+- Notable examples{get_language_instruction(language)}"""
 
     response = get_client().messages.create(
         model=get_model("flashcards"),
@@ -288,7 +297,7 @@ Include a mix of:
 
 
 def generate_summary(topic: str, subtopics_studied: list, progress_data: list,
-                     review_items: list = None, missed_questions: list = None) -> str:
+                     review_items: list = None, missed_questions: list = None, language: str = "en") -> str:
     """Generate a personalized summary based on what the user has studied."""
 
     activities_desc = []
@@ -336,7 +345,7 @@ Generate a brief, encouraging summary that:
 3. **Based on spaced repetition data, suggest specific topics to review**
 4. Keeps a supportive, motivating tone
 
-Keep it concise (150-250 words). Use markdown formatting."""
+Keep it concise (150-250 words). Use markdown formatting.{get_language_instruction(language)}"""
 
     response = get_client().messages.create(
         model=get_model("summary"),
@@ -348,7 +357,7 @@ Keep it concise (150-250 words). Use markdown formatting."""
 
 
 def get_recommendations(available_minutes: int, progress_summary: list, least_studied: list,
-                        review_items: list = None) -> dict:
+                        review_items: list = None, language: str = "en") -> dict:
     """Get AI-powered recommendations based on time and progress."""
 
     # Format progress for the prompt
@@ -403,7 +412,7 @@ Guidelines:
 - 30-60 min: Combination of read + test or multiple topics
 - **Prioritize spaced repetition items that are due for review**
 - Include a mix of new material and review
-- Keep total time within available minutes"""
+- Keep total time within available minutes{get_language_instruction(language)}"""
 
     response = get_client().messages.create(
         model=get_model("recommendations"),

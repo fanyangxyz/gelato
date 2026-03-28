@@ -36,6 +36,8 @@ if "show_back" not in st.session_state:
     st.session_state.show_back = False
 if "is_guest" not in st.session_state:
     st.session_state.is_guest = False
+if "language" not in st.session_state:
+    st.session_state.language = "en"
 
 
 # =============================================================================
@@ -130,6 +132,20 @@ with st.sidebar:
 
     st.divider()
 
+    # Language selector
+    language_options = {"en": "English", "zh": "中文"}
+    selected_lang = st.selectbox(
+        "Language / 语言",
+        options=list(language_options.keys()),
+        format_func=lambda x: language_options[x],
+        index=list(language_options.keys()).index(st.session_state.language)
+    )
+    if selected_lang != st.session_state.language:
+        st.session_state.language = selected_lang
+        st.rerun()
+
+    st.divider()
+
     st.subheader("Available Time")
     st.session_state.available_time = st.slider(
         "How many minutes do you have?",
@@ -202,7 +218,8 @@ def render_home():
                 st.session_state.available_time,
                 progress_summary,
                 least_studied,
-                review_items=review_items
+                review_items=review_items,
+                language=st.session_state.language
             )
 
             st.info(recommendations.get("recommendation", "Start exploring biology!"))
@@ -361,7 +378,8 @@ def render_read():
                 topic["name"],
                 subtopic,
                 topic["difficulty"],
-                reading_history=reading_history
+                reading_history=reading_history,
+                language=st.session_state.language
             )
             st.markdown(content)
 
@@ -404,7 +422,8 @@ def render_test():
                     num_questions=5,
                     difficulty=topic["difficulty"],
                     test_history=test_history,
-                    missed_questions=missed_q_texts
+                    missed_questions=missed_q_texts,
+                    language=st.session_state.language
                 )
             except Exception as e:
                 st.error(f"Error generating quiz: {e}")
@@ -494,7 +513,8 @@ def render_flashcards():
                     num_cards=8,
                     difficulty=topic["difficulty"],
                     missed_questions=missed_q_texts,
-                    review_items=review_items
+                    review_items=review_items,
+                    language=st.session_state.language
                 )
             except Exception as e:
                 st.error(f"Error generating flashcards: {e}")
@@ -589,7 +609,8 @@ def render_summarize():
                 topic["subtopics"],
                 topic_progress,
                 review_items=review_items,
-                missed_questions=missed_q_texts
+                missed_questions=missed_q_texts,
+                language=st.session_state.language
             )
 
             st.markdown(summary)
