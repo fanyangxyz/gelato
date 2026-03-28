@@ -23,7 +23,7 @@ if "selected_topic" not in st.session_state:
 if "selected_subtopic" not in st.session_state:
     st.session_state.selected_subtopic = None
 if "available_time" not in st.session_state:
-    st.session_state.available_time = 30
+    st.session_state.available_time = 15
 if "quiz_questions" not in st.session_state:
     st.session_state.quiz_questions = None
 if "quiz_answers" not in st.session_state:
@@ -113,6 +113,8 @@ def navigate_to(page: str, topic_id: int = None, subtopic: str = None):
     st.session_state.flashcards = None
     st.session_state.current_card = 0
     st.session_state.show_back = False
+    st.session_state.reading_content = None
+    st.session_state.reading_completed = False
 
 
 # Sidebar
@@ -369,27 +371,49 @@ def render_read():
     st.title(f"Reading: {subtopic}")
     st.caption(f"Topic: {topic['name']}")
 
-    with st.spinner("Generating content..."):
-        try:
-            # Get reading history for context
-            reading_history = db.get_reading_history(limit=10)
+    # Initialize reading content cache
+    if "reading_content" not in st.session_state:
+        st.session_state.reading_content = None
+    if "reading_completed" not in st.session_state:
+        st.session_state.reading_completed = False
 
-            content = claude_api.generate_reading(
-                topic["name"],
-                subtopic,
-                topic["difficulty"],
-                reading_history=reading_history,
-                language=st.session_state.language
-            )
-            st.markdown(content)
+    # Generate content if not cached
+    if st.session_state.reading_content is None:
+        with st.spinner("Generating content..."):
+            try:
+                # Get reading history for context
+                reading_history = db.get_reading_history(limit=10)
 
-            # Record progress
+                st.session_state.reading_content = claude_api.generate_reading(
+                    topic["name"],
+                    subtopic,
+                    topic["difficulty"],
+                    reading_history=reading_history,
+                    language=st.session_state.language
+                )
+                st.session_state.reading_completed = False
+            except Exception as e:
+                st.error(f"Error generating content: {e}")
+                return
+
+    # Display the content
+    st.markdown(st.session_state.reading_content)
+
+    st.divider()
+
+    # Completion button
+    if not st.session_state.reading_completed:
+        if st.button("Mark as Read", type="primary", use_container_width=True):
             db.record_read(topic["id"], subtopic, time_spent_minutes=10)
-
-            st.success("Reading completed! Progress saved.")
-
-        except Exception as e:
-            st.error(f"Error generating content: {e}")
+            st.session_state.reading_completed = True
+            st.rerun()
+    else:
+        st.success("Reading completed! Progress saved.")
+        if st.button("Read Another Topic", use_container_width=True):
+            st.session_state.reading_content = None
+            st.session_state.reading_completed = False
+            navigate_to("topics")
+            st.rerun()
 
 
 def render_test():
