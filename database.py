@@ -352,6 +352,24 @@ def record_summary(topic_id: int, subtopic: str, time_spent_minutes: int = 5):
     )
 
 
+def get_reading_history(topic_id: int = None, limit: int = 10):
+    """Get the user's reading history."""
+    progress = get_storage().get_progress(_current_user)
+    topics = {t["id"]: t["name"] for t in get_all_topics()}
+
+    readings = []
+    for p in progress:
+        if p.get("activity_type") != "read":
+            continue
+        if topic_id and p.get("topic_id") != topic_id:
+            continue
+
+        p["topic_name"] = topics.get(p.get("topic_id"), "Unknown")
+        readings.append(p)
+
+    return readings[:limit]
+
+
 def get_missed_questions(topic_id: int = None, limit: int = 10):
     """Get questions the user got wrong for review."""
     progress = get_storage().get_progress(_current_user)

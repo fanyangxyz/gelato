@@ -351,10 +351,14 @@ def render_read():
 
     with st.spinner("Generating content..."):
         try:
+            # Get reading history for context
+            reading_history = db.get_reading_history(limit=10)
+
             content = claude_api.generate_reading(
                 topic["name"],
                 subtopic,
-                topic["difficulty"]
+                topic["difficulty"],
+                reading_history=reading_history
             )
             st.markdown(content)
 

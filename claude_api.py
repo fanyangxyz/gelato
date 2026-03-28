@@ -60,17 +60,48 @@ def get_client():
     return client
 
 
-def generate_reading(topic: str, subtopic: str, difficulty: int = 1) -> str:
+def format_reading_history(history: list) -> str:
+    """Format reading history into context for the prompt."""
+    if not history:
+        return ""
+
+    lines = ["The student has previously studied:"]
+    for item in history[:10]:  # Limit to last 10 readings
+        subtopic = item.get("subtopic", "Unknown")
+        topic_name = item.get("topic_name", "")
+        date = item.get("completed_at", "")[:10] if item.get("completed_at") else ""
+        if topic_name:
+            lines.append(f"- {subtopic} ({topic_name}) - {date}")
+        else:
+            lines.append(f"- {subtopic} - {date}")
+
+    return "\n".join(lines)
+
+
+def generate_reading(topic: str, subtopic: str, difficulty: int = 1,
+                     reading_history: list = None) -> str:
     """Generate educational reading content on a biology topic."""
     difficulty_desc = {1: "beginner", 2: "intermediate", 3: "advanced"}
     level = difficulty_desc.get(difficulty, "intermediate")
+
+    # Build history context
+    history_context = ""
+    if reading_history:
+        history_context = f"""
+{format_reading_history(reading_history)}
+
+Use this context to:
+- Avoid repeating concepts they've already learned in detail
+- Build on their existing knowledge where relevant
+- Reference previous topics when making connections
+"""
 
     prompt = f"""You are a biology teacher creating educational content.
 
 Generate a clear, engaging explanation about {subtopic} within the broader topic of {topic}.
 
 Target level: {level}
-
+{history_context}
 Requirements:
 - Start with a brief introduction explaining why this topic matters
 - Break down key concepts with clear explanations
@@ -78,6 +109,7 @@ Requirements:
 - End with 2-3 key takeaways
 - Keep it concise but comprehensive (about 400-600 words)
 - Use markdown formatting for headers and bullet points
+- If the student has prior knowledge, briefly connect new concepts to what they've learned
 
 Do not include any quiz questions - just the educational content."""
 
