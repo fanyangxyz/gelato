@@ -192,6 +192,24 @@ def navigate_to(page: str, topic_id: int = None, subtopic: str = None):
     st.session_state.reading_chat_context = None
 
 
+def normalize_activity_type(activity_type: str) -> str:
+    """Map model-provided activity labels to routed page names."""
+    normalized = (activity_type or "read").strip().lower()
+    aliases = {
+        "read": "read",
+        "reading": "read",
+        "test": "test",
+        "quiz": "test",
+        "flashcard": "flashcards",
+        "flashcards": "flashcards",
+        "cards": "flashcards",
+        "summary": "summarize",
+        "summarize": "summarize",
+        "summarise": "summarize",
+    }
+    return aliases.get(normalized, "read")
+
+
 # Sidebar
 with st.sidebar:
     st.title("Biology Learning")
@@ -326,7 +344,7 @@ def render_home():
                         with col2:
                             st.write(f"~{activity.get('estimated_minutes', '?')} min")
                         with col3:
-                            act_type = activity.get("activity", "read")
+                            act_type = normalize_activity_type(activity.get("activity", "read"))
                             topic_id = activity.get("topic_id")
                             topic_match = next((t for t in topics if t["id"] == topic_id), None)
                             if topic_match is None:

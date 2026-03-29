@@ -39,6 +39,8 @@ def get_language_instruction(lang: str) -> str:
 
 client = None
 
+VALID_RECOMMENDATION_ACTIVITIES = {"read", "test", "flashcard", "flashcards", "summarize", "summary"}
+
 
 def get_api_key():
     """Get API key from user session, Streamlit secrets, or environment."""
@@ -82,6 +84,170 @@ def get_client():
     if client is None:
         client = Anthropic(api_key=get_api_key())
     return client
+
+
+def extract_json_text(text: str) -> str:
+    """Extract JSON from a plain response or fenced code block."""
+    cleaned = text.strip()
+    if "```json" in cleaned:
+        return cleaned.split("```json", 1)[1].split("```", 1)[0].strip()
+    if "```" in cleaned:
+        return cleaned.split("```", 1)[1].split("```", 1)[0].strip()
+    return cleaned
+
+
+def parse_json_response(text: str):
+    """Parse a model response expected to contain JSON."""
+    return json.loads(extract_json_text(text))
+
+
+def request_structured_json(task: str, prompt: str, validator, retries: int = 1):
+    """Request JSON from the model and validate it, retrying once if needed."""
+    full_prompt = prompt
+    last_error = None
+
+    for attempt in range(retries + 1):
+        response = get_client().messages.create(
+            model=get_model(task),
+            max_tokens=get_max_tokens(task),
+            messages=[{"role": "user", "content": full_prompt}]
+        )
+
+        try:
+            data = parse_json_response(response.content[0].text)
+            return validator(data)
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
+            last_error = exc
+            if attempt == retries:
+                break
+            full_prompt = (
+                prompt
+                + "\n\nYour previous response did not match the required JSON schema. "
+                  "Return ONLY valid JSON with exactly the required fields and types. "
+                  "Do not include markdown fences or any extra text."
+            )
+
+    raise ValueError(f"Invalid structured output for {task}: {last_error}")
+
+
+def validate_test_response(data: dict) -> list:
+    """Validate quiz JSON structure and return normalized questions."""
+    if not isinstance(data, dict):
+        raise ValueError("Quiz response must be a JSON object")
+
+    questions = data.get("questions")
+    if not isinstance(questions, list) or not questions:
+        raise ValueError("Quiz response must include a non-empty questions list")
+
+    validated = []
+    for item in questions:
+        if not isinstance(item, dict):
+            raise ValueError("Each question must be an object")
+
+        question = str(item.get("question", "")).strip()
+        explanation = str(item.get("explanation", "")).strip()
+        options = item.get("options")
+        correct = item.get("correct")
+
+        if not question:
+            raise ValueError("Question text is required")
+        if not isinstance(options, list) or len(options) != 4:
+            raise ValueError("Each question must have exactly 4 options")
+        normalized_options = [str(option).strip() for option in options]
+        if any(not option for option in normalized_options):
+            raise ValueError("Options must be non-empty strings")
+        if not isinstance(correct, int) or correct < 0 or correct >= len(normalized_options):
+            raise ValueError("Correct answer index is invalid")
+        if not explanation:
+            raise ValueError("Explanation is required")
+
+        validated.append({
+            "question": question,
+            "options": normalized_options,
+            "correct": correct,
+            "explanation": explanation,
+        })
+
+    return validated
+
+
+def validate_flashcards_response(data: dict) -> list:
+    """Validate flashcard JSON structure and return normalized cards."""
+    if not isinstance(data, dict):
+        raise ValueError("Flashcard response must be a JSON object")
+
+    flashcards = data.get("flashcards")
+    if not isinstance(flashcards, list) or not flashcards:
+        raise ValueError("Flashcard response must include a non-empty flashcards list")
+
+    validated = []
+    for item in flashcards:
+        if not isinstance(item, dict):
+            raise ValueError("Each flashcard must be an object")
+
+        front = str(item.get("front", "")).strip()
+        back = str(item.get("back", "")).strip()
+        if not front or not back:
+            raise ValueError("Each flashcard must include front and back text")
+
+        validated.append({"front": front, "back": back})
+
+    return validated
+
+
+def validate_recommendations_response(data: dict) -> dict:
+    """Validate recommendations JSON structure and return normalized output."""
+    if not isinstance(data, dict):
+        raise ValueError("Recommendations response must be a JSON object")
+
+    recommendation = str(data.get("recommendation", "")).strip()
+    activities = data.get("suggested_activities")
+
+    if not recommendation:
+        raise ValueError("Recommendation text is required")
+    if not isinstance(activities, list):
+        raise ValueError("suggested_activities must be a list")
+
+    topic_catalog = {topic["id"]: topic for topic in db.get_all_topics()}
+    validated_activities = []
+
+    for item in activities:
+        if not isinstance(item, dict):
+            raise ValueError("Each activity must be an object")
+
+        activity = str(item.get("activity", "")).strip().lower()
+        topic_id = item.get("topic_id")
+        topic_name = str(item.get("topic", "")).strip()
+        subtopic = str(item.get("subtopic", "")).strip()
+        reason = str(item.get("reason", "")).strip()
+        estimated_minutes = item.get("estimated_minutes")
+
+        if activity not in VALID_RECOMMENDATION_ACTIVITIES:
+            raise ValueError(f"Unsupported activity type: {activity}")
+        if not isinstance(topic_id, int) or topic_id not in topic_catalog:
+            raise ValueError("Activity topic_id is invalid")
+        if topic_name != topic_catalog[topic_id]["name"]:
+            raise ValueError("Activity topic name does not match topic_id")
+        if subtopic not in topic_catalog[topic_id].get("subtopics", []):
+            raise ValueError("Activity subtopic does not match topic_id")
+        if not isinstance(estimated_minutes, int) or estimated_minutes <= 0:
+            raise ValueError("estimated_minutes must be a positive integer")
+        if not reason:
+            raise ValueError("Activity reason is required")
+
+        validated_activities.append({
+            "activity": activity,
+            "topic_id": topic_id,
+            "topic": topic_name,
+            "subtopic": subtopic,
+            "estimated_minutes": estimated_minutes,
+            "reason": reason,
+        })
+
+    return {
+        "recommendation": recommendation,
+        "suggested_activities": validated_activities,
+    }
 
 
 def format_reading_history(history: list) -> str:
@@ -245,25 +411,9 @@ Return ONLY valid JSON in this exact format:
 The "correct" field should be the index (0-3) of the correct option.
 Make questions progressively harder. Include a mix of recall and application questions.{get_language_instruction(language)}"""
 
-    response = get_client().messages.create(
-        model=get_model("test"),
-        max_tokens=get_max_tokens("test"),
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    # Parse the JSON response
-    text = response.content[0].text
-    # Try to extract JSON from the response
     try:
-        # Handle case where response might have markdown code blocks
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-
-        data = json.loads(text.strip())
-        return data.get("questions", [])
-    except json.JSONDecodeError:
+        return request_structured_json("test", prompt, validate_test_response)
+    except ValueError:
         return []
 
 
@@ -328,22 +478,9 @@ Include a mix of:
 - Processes or mechanisms
 - Notable examples{get_language_instruction(language)}"""
 
-    response = get_client().messages.create(
-        model=get_model("flashcards"),
-        max_tokens=get_max_tokens("flashcards"),
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    text = response.content[0].text
     try:
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-
-        data = json.loads(text.strip())
-        return data.get("flashcards", [])
-    except json.JSONDecodeError:
+        return request_structured_json("flashcards", prompt, validate_flashcards_response)
+    except ValueError:
         return []
 
 
@@ -477,21 +614,9 @@ Guidelines:
 - Include a mix of new material and review
 - Keep total time within available minutes{get_language_instruction(language)}"""
 
-    response = get_client().messages.create(
-        model=get_model("recommendations"),
-        max_tokens=get_max_tokens("recommendations"),
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    text = response.content[0].text
     try:
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-
-        return json.loads(text.strip())
-    except json.JSONDecodeError:
+        return request_structured_json("recommendations", prompt, validate_recommendations_response)
+    except ValueError:
         return {
             "recommendation": "Start with the basics and build from there!",
             "suggested_activities": []
