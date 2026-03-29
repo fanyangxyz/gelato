@@ -1,11 +1,11 @@
 {
   "models": {
-    "reading": "claude-sonnet-4-20250514",
-    "chat": "claude-sonnet-4-20250514",
+    "reading": "claude-haiku-4-5-20251001",
+    "chat": "claude-haiku-4-5-20251001",
     "test": "claude-sonnet-4-20250514",
-    "flashcards": "claude-sonnet-4-20250514",
-    "summary": "claude-sonnet-4-20250514",
-    "recommendations": "claude-sonnet-4-20250514"
+    "flashcards": "claude-haiku-4-5-20251001",
+    "summary": "claude-haiku-4-5-20251001",
+    "recommendations": "claude-haiku-4-5-20251001"
   },
   "defaults": {
     "test_questions": 5,
