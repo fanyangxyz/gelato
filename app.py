@@ -109,6 +109,7 @@ def render_api_setup():
             placeholder="Enter code..."
         )
         st.caption("If you have an access code, enter it here to use the app.")
+        st.caption("Interested in trying it? Email me at fanyangxyz33 [at] gmail [dot] com.")
 
         if st.button("Submit Code", key="use_passphrase"):
             owner_passphrase = get_owner_passphrase()
