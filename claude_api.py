@@ -348,6 +348,29 @@ Reading passage:
     return response.content[0].text
 
 
+def translate_content(content: str, target_language: str) -> str:
+    """Translate existing markdown content while preserving structure."""
+    target_label = "Chinese (Simplified)" if target_language == "zh" else "English"
+    prompt = f"""Translate the following educational markdown content into {target_label}.
+
+Requirements:
+- Preserve the meaning and teaching intent
+- Preserve markdown structure, including headings and bullet points
+- Do not add new sections or commentary
+- Return only the translated markdown
+
+Content:
+{content}"""
+
+    response = get_client().messages.create(
+        model=get_model("chat"),
+        max_tokens=get_max_tokens("chat"),
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    return response.content[0].text
+
+
 def format_test_history(test_history: list, missed_questions: list) -> str:
     """Format test history and missed questions for context."""
     lines = []

@@ -46,6 +46,8 @@ if "reading_chat_messages" not in st.session_state:
     st.session_state.reading_chat_messages = []
 if "reading_chat_context" not in st.session_state:
     st.session_state.reading_chat_context = None
+if "reading_content_language" not in st.session_state:
+    st.session_state.reading_content_language = None
 
 
 # =============================================================================
@@ -187,9 +189,43 @@ def navigate_to(page: str, topic_id: int = None, subtopic: str = None):
     st.session_state.current_card = 0
     st.session_state.show_back = False
     st.session_state.reading_content = None
+    st.session_state.reading_content_language = None
     st.session_state.reading_completed = False
     st.session_state.reading_chat_messages = []
     st.session_state.reading_chat_context = None
+
+
+def handle_language_change(new_language: str):
+    """Update state for a language change, translating active reading content when possible."""
+    previous_language = st.session_state.language
+    if new_language == previous_language:
+        return
+
+    should_translate_reading = (
+        st.session_state.current_page == "read"
+        and st.session_state.reading_content
+        and st.session_state.reading_content_language == previous_language
+    )
+
+    st.session_state.language = new_language
+    st.session_state.reading_chat_messages = []
+    st.session_state.reading_chat_context = None
+
+    if should_translate_reading:
+        with st.spinner("Translating content..."):
+            try:
+                st.session_state.reading_content = claude_api.translate_content(
+                    st.session_state.reading_content,
+                    new_language
+                )
+                st.session_state.reading_content_language = new_language
+            except Exception as e:
+                st.error(f"Could not translate the reading content: {e}")
+                st.session_state.reading_content = None
+                st.session_state.reading_content_language = None
+    else:
+        st.session_state.reading_content = None
+        st.session_state.reading_content_language = None
 
 
 def normalize_activity_type(activity_type: str) -> str:
@@ -248,7 +284,7 @@ with st.sidebar:
         index=list(language_options.keys()).index(st.session_state.language)
     )
     if selected_lang != st.session_state.language:
-        st.session_state.language = selected_lang
+        handle_language_change(selected_lang)
         st.rerun()
 
     st.divider()
@@ -511,6 +547,7 @@ def render_read():
                     reading_history=reading_history,
                     language=st.session_state.language
                 )
+                st.session_state.reading_content_language = st.session_state.language
                 st.session_state.reading_completed = False
             except Exception as e:
                 st.error(f"Error generating content: {e}")
@@ -529,6 +566,7 @@ def render_read():
         st.success("Reading completed! Progress saved.")
         if st.button("Read Another Topic", use_container_width=True):
             st.session_state.reading_content = None
+            st.session_state.reading_content_language = None
             st.session_state.reading_completed = False
             navigate_to("topics")
             st.rerun()
