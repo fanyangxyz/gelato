@@ -42,6 +42,10 @@ if "is_guest" not in st.session_state:
     st.session_state.is_guest = False
 if "language" not in st.session_state:
     st.session_state.language = "en"
+if "reading_chat_messages" not in st.session_state:
+    st.session_state.reading_chat_messages = []
+if "reading_chat_context" not in st.session_state:
+    st.session_state.reading_chat_context = None
 
 
 # =============================================================================
@@ -184,6 +188,8 @@ def navigate_to(page: str, topic_id: int = None, subtopic: str = None):
     st.session_state.show_back = False
     st.session_state.reading_content = None
     st.session_state.reading_completed = False
+    st.session_state.reading_chat_messages = []
+    st.session_state.reading_chat_context = None
 
 
 # Sidebar
@@ -452,6 +458,19 @@ def render_read():
     st.title(f"Reading: {subtopic}")
     st.caption(f"Topic: {topic['name']}")
 
+    chat_context = (topic["id"], subtopic, st.session_state.language)
+    if st.session_state.reading_chat_context != chat_context:
+        st.session_state.reading_chat_messages = [
+            {
+                "role": "assistant",
+                "content": (
+                    f"Ask about **{subtopic}** while you read. "
+                    "I can explain passages, define terms, or compare concepts."
+                )
+            }
+        ]
+        st.session_state.reading_chat_context = chat_context
+
     # Initialize reading content cache
     if "reading_content" not in st.session_state:
         st.session_state.reading_content = None
@@ -477,12 +496,10 @@ def render_read():
                 st.error(f"Error generating content: {e}")
                 return
 
-    # Display the content
     st.markdown(st.session_state.reading_content)
 
     st.divider()
 
-    # Completion button
     if not st.session_state.reading_completed:
         if st.button("Mark as Read", type="primary", use_container_width=True):
             db.record_read(topic["id"], subtopic, time_spent_minutes=10)
@@ -495,6 +512,65 @@ def render_read():
             st.session_state.reading_completed = False
             navigate_to("topics")
             st.rerun()
+
+    st.divider()
+
+    chat_header_col, chat_action_col = st.columns([3, 1])
+    with chat_header_col:
+        st.subheader("Reading Chat")
+    with chat_action_col:
+        if st.button("Reset", key="reset_reading_chat", use_container_width=True):
+            st.session_state.reading_chat_messages = [
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Ask about **{subtopic}** while you read. "
+                        "I can explain passages, define terms, or compare concepts."
+                    )
+                }
+            ]
+            st.rerun()
+
+    chat_messages_container = st.container()
+    with chat_messages_container:
+        for message in st.session_state.reading_chat_messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+    input_col, send_col = st.columns([5, 1])
+    with input_col:
+        prompt = st.text_input(
+            "Ask about this reading",
+            key="reading_chat_input_text",
+            label_visibility="collapsed",
+            placeholder="Ask about this reading"
+        )
+    with send_col:
+        send_clicked = st.button("Send", key="reading_chat_send", use_container_width=True)
+
+    if send_clicked and prompt.strip():
+        prompt = prompt.strip()
+        st.session_state.reading_chat_messages.append(
+            {"role": "user", "content": prompt}
+        )
+
+        try:
+            reply = claude_api.chat_about_reading(
+                topic["name"],
+                subtopic,
+                st.session_state.reading_content,
+                conversation_history=st.session_state.reading_chat_messages,
+                difficulty=topic["difficulty"],
+                language=st.session_state.language
+            )
+        except Exception as e:
+            reply = f"Sorry, I couldn't answer that right now: {e}"
+
+        st.session_state.reading_chat_messages.append(
+            {"role": "assistant", "content": reply}
+        )
+        st.session_state.reading_chat_input_text = ""
+        st.rerun()
 
 
 def render_test():

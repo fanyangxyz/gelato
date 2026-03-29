@@ -147,6 +147,40 @@ Do not include any quiz questions - just the educational content.{lang_instructi
     return response.content[0].text
 
 
+def chat_about_reading(topic: str, subtopic: str, reading_content: str,
+                       conversation_history: list = None, difficulty: int = 1,
+                       language: str = "en") -> str:
+    """Answer a follow-up question while the student is reading."""
+    difficulty_desc = {1: "beginner", 2: "intermediate", 3: "advanced"}
+    level = difficulty_desc.get(difficulty, "intermediate")
+    history = conversation_history or []
+
+    system_prompt = f"""You are a biology tutor helping a student while they read.
+
+Current topic: {topic}
+Current subtopic: {subtopic}
+Target level: {level}
+
+Use the reading passage below as the primary context. Keep answers accurate, concise, and supportive.
+- Prioritize explaining the current reading in simpler terms when helpful
+- Answer the student's exact question first
+- If the reading does not fully cover the answer, say that clearly and provide a careful biology explanation
+- Use markdown when it improves clarity
+- Suggest a quick check-for-understanding question only when it is genuinely helpful
+
+Reading passage:
+{reading_content}{get_language_instruction(language)}"""
+
+    response = get_client().messages.create(
+        model=get_model("chat"),
+        max_tokens=get_max_tokens("chat"),
+        system=system_prompt,
+        messages=history
+    )
+
+    return response.content[0].text
+
+
 def format_test_history(test_history: list, missed_questions: list) -> str:
     """Format test history and missed questions for context."""
     lines = []
