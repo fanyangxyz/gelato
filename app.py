@@ -2,6 +2,7 @@ import streamlit as st
 import database as db
 import claude_api
 from datetime import datetime
+from pathlib import Path
 
 # Initialize database
 db.init_db()
@@ -12,6 +13,8 @@ st.set_page_config(
     page_icon="🧬",
     layout="wide"
 )
+
+LOGO_PATH = Path(__file__).parent / "data" / "gelato_dna.png"
 
 # Initialize session state
 if "current_user" not in st.session_state:
@@ -66,9 +69,17 @@ def get_owner_passphrase():
     return os.environ.get("ACCESS_PASSPHRASE", "")
 
 
+def render_branding(width: int = 320):
+    """Render the app logo when available."""
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=width)
+    else:
+        st.title("Biology Learning App")
+
+
 def render_api_setup():
     """Render the API key setup screen."""
-    st.title("Biology Learning App")
+    render_branding()
     st.write("To use this app, please provide API access.")
 
     tab1, tab2 = st.tabs(["Use Your Own API Key", "Enter Access Code"])
@@ -121,7 +132,7 @@ if st.session_state.api_key_source is None:
 
 def render_login():
     """Render the login/user selection screen."""
-    st.title("Biology Learning App")
+    render_branding()
     st.write("Select your profile or create a new one to track your progress.")
 
     # Guest option
@@ -248,7 +259,7 @@ def normalize_activity_type(activity_type: str) -> str:
 
 # Sidebar
 with st.sidebar:
-    st.title("Biology Learning")
+    render_branding(width=220)
 
     # User info
     if st.session_state.is_guest:
