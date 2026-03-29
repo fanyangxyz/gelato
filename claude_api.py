@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from anthropic import Anthropic
+import database as db
 
 # Load .env file for local development
 load_dotenv(Path(__file__).parent / ".env")
@@ -421,6 +422,11 @@ def get_recommendations(available_minutes: int, progress_summary: list, least_st
     progress_str = "\n".join(progress_desc) if progress_desc else "No progress yet"
 
     least_studied_names = [t["name"] for t in least_studied]
+    topic_catalog = []
+    for topic in db.get_all_topics():
+        subtopics = ", ".join(topic.get("subtopics", []))
+        topic_catalog.append(f'- id: {topic["id"]}, topic: "{topic["name"]}", subtopics: [{subtopics}]')
+    topic_catalog_str = "\n".join(topic_catalog)
 
     # Build spaced repetition context
     sr_context = ""
@@ -442,14 +448,18 @@ Current progress by topic:
 Topics needing more attention: {', '.join(least_studied_names)}
 {sr_context}
 
+Available topics and subtopics to choose from:
+{topic_catalog_str}
+
 Based on the available time, recommend a study plan. Return ONLY valid JSON:
 {{
   "recommendation": "Brief 1-2 sentence recommendation",
   "suggested_activities": [
     {{
       "activity": "read|test|flashcard|summarize",
-      "topic": "Topic name",
-      "subtopic": "Specific subtopic to focus on",
+      "topic_id": 1,
+      "topic": "Topic name exactly as listed above",
+      "subtopic": "Specific subtopic exactly as listed above",
       "estimated_minutes": 10,
       "reason": "Why this activity"
     }}
@@ -457,6 +467,9 @@ Based on the available time, recommend a study plan. Return ONLY valid JSON:
 }}
 
 Guidelines:
+- Use only topics and subtopics from the provided catalog
+- Keep `topic` and `subtopic` exactly as listed in the catalog so the app can route correctly
+- `reason` and `recommendation` should be in the requested language, but identifiers must stay exact
 - 5-10 min: Quick flashcards or summary
 - 15-30 min: One focused read or test session
 - 30-60 min: Combination of read + test or multiple topics

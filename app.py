@@ -316,6 +316,7 @@ def render_home():
             activities = recommendations.get("suggested_activities", [])
             if activities:
                 st.write("**Suggested activities:**")
+                topics = db.get_all_topics()
                 for i, activity in enumerate(activities):
                     with st.container():
                         col1, col2, col3 = st.columns([3, 1, 1])
@@ -326,9 +327,10 @@ def render_home():
                             st.write(f"~{activity.get('estimated_minutes', '?')} min")
                         with col3:
                             act_type = activity.get("activity", "read")
-                            # Find topic ID
-                            topics = db.get_all_topics()
-                            topic_match = next((t for t in topics if t["name"] == activity.get("topic")), None)
+                            topic_id = activity.get("topic_id")
+                            topic_match = next((t for t in topics if t["id"] == topic_id), None)
+                            if topic_match is None:
+                                topic_match = next((t for t in topics if t["name"] == activity.get("topic")), None)
                             if topic_match and st.button(f"Start", key=f"rec_{i}"):
                                 navigate_to(act_type, topic_match["id"], activity.get("subtopic"))
                                 st.rerun()
