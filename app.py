@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 LOGO_PATH = Path(__file__).parent / "data" / "gelato_dna.png"
-TIME_OPTIONS = [5, 15, 30, 60]
+TIME_OPTIONS = [5, 15, 30]
 
 # Initialize session state
 if "current_user" not in st.session_state:
@@ -311,7 +311,7 @@ with st.sidebar:
         "How much time do you have?",
         options=TIME_OPTIONS,
         default=current_time,
-        format_func=lambda minutes: "1hr" if minutes == 60 else f"{minutes} mins"
+        format_func=lambda minutes: f"{minutes} mins"
     )
 
     st.divider()
