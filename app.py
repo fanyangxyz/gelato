@@ -15,6 +15,7 @@ st.set_page_config(
 )
 
 LOGO_PATH = Path(__file__).parent / "data" / "gelato_dna.png"
+TIME_OPTIONS = [5, 15, 30, 60]
 
 # Initialize session state
 if "current_user" not in st.session_state:
@@ -302,12 +303,15 @@ with st.sidebar:
     st.divider()
 
     st.subheader("Available Time")
-    st.session_state.available_time = st.slider(
-        "How many minutes do you have?",
-        min_value=5,
-        max_value=120,
-        value=st.session_state.available_time,
-        step=5
+    current_time = min(
+        TIME_OPTIONS,
+        key=lambda option: abs(option - st.session_state.available_time)
+    )
+    st.session_state.available_time = st.segmented_control(
+        "How much time do you have?",
+        options=TIME_OPTIONS,
+        default=current_time,
+        format_func=lambda minutes: "1hr" if minutes == 60 else f"{minutes} mins"
     )
 
     st.divider()
